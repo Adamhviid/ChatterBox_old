@@ -7,7 +7,7 @@ const App: React.FC = () => {
   const socketRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const socket = new WebSocket("ws://localhost:3000");
+    const socket = new WebSocket(import.meta.env.VITE_WSS_URL || "");
     socketRef.current = socket;
 
     socket.onopen = () => console.log("Connected to the server");
