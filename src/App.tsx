@@ -1,5 +1,12 @@
 import React, { useEffect, useState, useRef } from "react";
+import moment from "moment";
 import "./App.css";
+
+interface Message {
+  message: string;
+  userId: string;
+  sentAt: string;
+}
 
 const App: React.FC = () => {
   const [messages, setMessages] = useState<string[]>([]);
@@ -10,11 +17,42 @@ const App: React.FC = () => {
     const socket = new WebSocket(import.meta.env.VITE_WSS_URL || "");
     socketRef.current = socket;
 
-    socket.onopen = () => console.log("Connected to the server");
+    socket.onopen = () => {
+      console.log("Connected to the server");
+      // Request the last 25 messages
+      socket.send(JSON.stringify({ type: "load_messages" }));
+    };
 
-    socket.onmessage = async (event) => {
-      const message = await event.data.text();
-      setMessages((prevMessages) => [...prevMessages, message]);
+    socket.onmessage = (event) => {
+      const messageData = JSON.parse(event.data);
+      console.log(messageData);
+
+      if (messageData.type === "load_messages" && Array.isArray(messageData.messages)) {
+        // Handle the initial load of messages
+        const formattedMessages = messageData.messages.map((msg: Message) => {
+          const { message, userId, sentAt } = msg;
+          const date = moment(sentAt);
+          if (!date.isValid()) {
+            console.error("Invalid date:", sentAt);
+            return `(${sentAt}) ${userId}: ${message}`;
+          }
+          const formattedDate = date.calendar();
+          return `(${formattedDate}) ${userId}: ${message}`;
+        });
+        setMessages(formattedMessages);
+      } else {
+        // Handle a single incoming message
+        const { message, userId, sentAt } = messageData;
+        const date = moment(sentAt);
+        if (!date.isValid()) {
+          console.error("Invalid date:", sentAt);
+          setMessages((prevMessages) => [...prevMessages, `(${sentAt}) ${userId}: ${message}`]);
+          return;
+        }
+        const formattedDate = date.calendar();
+        const formattedMessage = `(${formattedDate}) ${userId}: ${message}`;
+        setMessages((prevMessages) => [...prevMessages, formattedMessage]);
+      }
     };
 
     socket.onclose = () => console.log("Disconnected from the server");
@@ -24,7 +62,8 @@ const App: React.FC = () => {
 
   const handleSend = () => {
     if (inputValue.trim() && socketRef.current) {
-      socketRef.current.send(inputValue);
+      const message = JSON.stringify({ message: inputValue });
+      socketRef.current.send(message);
       setInputValue("");
     }
   };
